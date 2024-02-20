@@ -8,11 +8,11 @@ services:
     networks:
       - elt_network
     environment:
-      - POSTGRES_DB: ${POSTGRES_SOURCE_DB}
-      - POSTGRES_USER: ${POSTGRES_USER}
-      - POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_SOURCE_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      -./source_db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./source_db_init/init.sql:/docker-entrypoint-initdb.d/init.sql
   
   destination_postgres:
     image: postgres:14-alpine
@@ -21,14 +21,14 @@ services:
     networks:
       - elt_network
     environment:
-      - POSTGRES_DB: ${POSTGRES_DESTINATION_DB}
-      - POSTGRES_USER: ${POSTGRES_USER}
-      - POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DESTINATION_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
   elt_script:
     build: 
-      context: ./elt_script
-      dockerfile: dockerfile
+      context: ./elt
+      dockerfile: Dockerfile
     command: [ "python", "elt_script.py" ]
     networks:
       - elt_network
