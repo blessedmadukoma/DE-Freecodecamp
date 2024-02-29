@@ -6,3 +6,6 @@ Automation using dbt
   - `python3 -m venv env`
   - `source env/bin/activate`
 3. Install requirements.txt: `pip install -r requirements.txt`
+
+Note:
+- To generate the fernet key: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`

@@ -25,38 +25,119 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
-  elt_script:
-    build: 
-      context: ./elt
-      dockerfile: Dockerfile
-    command: [ "python", "elt_script.py" ]
-    networks:
-      - elt_network
-    depends_on:
-      - source_postgres
-      - destination_postgres
+  # elt_script:
+  #   build: 
+  #     context: ./elt
+  #     dockerfile: Dockerfile
+  #   command: [ "python", "elt_script.py" ]
+  #   networks:
+  #     - elt_network
+  #   depends_on:
+  #     - source_postgres
+  #     - destination_postgres
 
-  dbt:
-    image: ghcr.io/dbt-labs/dbt-postgres:1.4.7
-    command:
-      [
-        "run",
-        "--profiles-dir",
-        "/root",
-        "--project-dir",
-        "/dbt",
-        "--full-refresh"
-      ]
+  # dbt:
+  #   image: ghcr.io/dbt-labs/dbt-postgres:1.4.7
+  #   command:
+  #     [
+  #       "run",
+  #       "--profiles-dir",
+  #       "/root",
+  #       "--project-dir",
+  #       "/dbt",
+  #       "--full-refresh"
+  #     ]
+  #   networks:
+  #     - elt_network
+  #   volumes:
+  #     - ./custom_postgres_freecodecamp:/dbt
+  #     - ~/.dbt:/root
+  #   depends_on:
+  #     - elt_script
+  #   environment:
+  #     DBT_PROFILE: default
+  #     DBT_TARGET: dev
+
+  # airflow - needs a db to store its metadata and logs
+  postgres:
+    image: postgres:14-alpine
     networks:
       - elt_network
-    volumes:
-      - ./custom_postgres_freecodecamp:/dbt
-      - ~/.dbt:/root
-    depends_on:
-      - elt_script
     environment:
-      DBT_PROFILE: default
-      DBT_TARGET: dev
+      - POSTGRES_USER=${POSTGRES_AIRFLOW_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_AIRFLOW_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_AIRFLOW_DB}
+    
+  init-airflow:
+    image: apache/airflow:latest
+    depends_on:
+      - postgres
+    networks:
+      - elt_network
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgres+psycopg2://airflow:airflow@postgres/airflow
+    command: >
+      bash -c "airflow db init && airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@admin.com"
+
+  webserver:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    user: root
+    depends_on:
+      - postgres
+    networks:
+      - elt_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./elt:/opt/airflow/elt
+      - ./custom_postgres_freecodecamp:/opt/dbt
+      - ~/.dbt:/root/.dbt
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - LOAD_EX=n
+      - EXECUTOR=Local
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgres+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE_FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW__WEBSERVER__DEFAULT__USER_USERNAME=${AIRFLOW_WEBSERVER_USERNAME}
+      - AIRFLOW__WEBSERVER__DEFAULT__USER_PASSWORD=${AIRFLOW_WEBSERVER_PASSWORD}
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW_WEBSERVER_SECRET}
+      - AIRFLOW_WWW__USER_USERNAME=${AIRFLOW_WWW_USER_USERNAME}
+      - AIRFLOW_WWW__USER_PASSWORD=${AIRFLOW_WWW_USER_PASSWORD}
+    ports:
+      - "8080:8080"
+    command: webserver
+
+  scheduler:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    user: root
+    depends_on:
+      - postgres
+    networks:
+      - elt_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./elt:/opt/airflow/elt
+      - ./custom_postgres_freecodecamp:/opt/dbt
+      - ~/.dbt:/root/.dbt
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - LOAD_EX=n
+      - EXECUTOR=Local
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgres+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE_FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW__WEBSERVER__DEFAULT__USER_USERNAME=${AIRFLOW_WEBSERVER_USERNAME}
+      - AIRFLOW__WEBSERVER__DEFAULT__USER_PASSWORD=${AIRFLOW_WEBSERVER_PASSWORD}
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW_WEBSERVER_SECRET}
+      - AIRFLOW_WWW__USER_USERNAME=${AIRFLOW_WWW_USER_USERNAME}
+      - AIRFLOW_WWW__USER_PASSWORD=${AIRFLOW_WWW_USER_PASSWORD}
+    command: scheduler
 
 networks:
   elt_network:
